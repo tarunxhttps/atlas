@@ -1,0 +1,13 @@
+appId: dev.tarun.atlas
+productName: Atlas
+directories:
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - node_modules/web-tree-sitter/**
+  - node_modules/tree-sitter-*/*.wasm
+mac:
+  target: dmg
+  category: public.app-category.developer-tools

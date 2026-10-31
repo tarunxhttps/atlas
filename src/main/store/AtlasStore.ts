@@ -71,6 +71,7 @@ export class AtlasStore {
       key: analysis.key,
       url: analysis.pr.url,
       title: analysis.pr.title,
+      author: analysis.pr.author,
       headSha: analysis.pr.headSha,
       openedAt: new Date().toISOString(),
     });
@@ -84,6 +85,11 @@ export class AtlasStore {
 
   recent(): RecentEntry[] {
     return this.readJson<RecentEntry[]>(join(this.rootDir, "recent.json"), []);
+  }
+
+  /** The recent list for the home page, with authors filled in for entries saved before they were recorded. */
+  recentWithAuthors(): RecentEntry[] {
+    return this.recent().map((entry) => (entry.author ? entry : { ...entry, author: this.loadAnalysis(entry.key, entry.headSha)?.pr.author }));
   }
 
   review(key: string): StoredReview {

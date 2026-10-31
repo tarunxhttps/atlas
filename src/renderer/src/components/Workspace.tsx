@@ -35,10 +35,10 @@ interface Props {
 }
 
 const views: { id: View; label: string; key: string }[] = [
-  { id: "architecture", label: "Architecture", key: "1" },
-  { id: "package", label: "Package", key: "2" },
-  { id: "module", label: "Module", key: "3" },
-  { id: "code", label: "Code", key: "4" },
+  { id: "code", label: "Code", key: "1" },
+  { id: "architecture", label: "Architecture", key: "2" },
+  { id: "package", label: "Package", key: "3" },
+  { id: "module", label: "Module", key: "4" },
   { id: "flows", label: "Flows", key: "5" },
 ];
 
@@ -58,8 +58,8 @@ function WorkspaceInner({ analysis, settings, progress, onHome, refreshing, refr
   const github = useMemo(() => new GitHubLinks(analysis.pr), [analysis.pr]);
   const flow = useReactFlow();
 
-  const [view, setView] = useState<View>(analysis.narrative ? "architecture" : "code");
-  const [scope, setScope] = useState<Scope>("context");
+  const [view, setView] = useState<View>("code");
+  const [scope, setScope] = useState<Scope>("changed");
   const [showCode, setShowCode] = useState(false);
   const [hideTests, setHideTests] = useState(true);
   const [isolateId, setIsolateId] = useState<string | null>(null);
@@ -119,17 +119,6 @@ function WorkspaceInner({ analysis, settings, progress, onHome, refreshing, refr
   }, [checkForUpdates, analysis.pr.headSha]);
 
   const incoming = update && update.headSha !== analysis.pr.headSha ? update : null;
-
-  // The architecture view only exists once Claude answers; switch to it then, unless the reviewer is already looking at something.
-  const hadNarrative = useRef(Boolean(analysis.narrative));
-  const selectionRef = useRef(selectedIds);
-  selectionRef.current = selectedIds;
-  useEffect(() => {
-    if (analysis.narrative && !hadNarrative.current) {
-      hadNarrative.current = true;
-      if (selectionRef.current.length === 0) setView("architecture");
-    }
-  }, [analysis.narrative]);
 
   const options: GraphOptions = useMemo(
     () => ({ level: view === "flows" ? "code" : view, scope, showCode, hideTests, isolateId }),

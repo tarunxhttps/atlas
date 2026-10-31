@@ -1,6 +1,10 @@
 import { isTestPath } from "@shared/paths";
 import type { CallEdge, CodeSymbol, Delta } from "@shared/types";
 import type { AnalysisModel } from "../lib/AnalysisModel";
+import { changePreview, type PreviewLine } from "../lib/codePreview";
+
+const maxPreviewLines = 400;
+const visiblePreviewLines = 18;
 
 export type Level = "architecture" | "package" | "module" | "code";
 export type Scope = "changed" | "context" | "all";
@@ -34,7 +38,8 @@ export interface SpecNode {
   additions: number;
   deletions: number;
   chips: FileChip[];
-  codeLines: string[];
+  /** Shown when "code" is on: lines from just above the symbol's first change. */
+  codeLines: PreviewLine[];
 }
 
 export interface SpecEdge {
@@ -246,8 +251,7 @@ export class GraphBuilder {
   }
 
   private symbolNode(symbol: CodeSymbol, parentId: string, showCode: boolean): SpecNode {
-    const side = symbol.head ?? symbol.base!;
-    const codeLines = showCode ? side.code.split("\n").slice(0, 18) : [];
+    const codeLines = showCode ? changePreview(symbol, maxPreviewLines) : [];
     const node = this.blank(symbol.id, "symbol", parentId, this.model.label(symbol).split(".").pop() ?? symbol.name, symbol.kind);
     node.delta = symbol.delta;
     node.neighbour = !symbol.inPr;
@@ -255,7 +259,8 @@ export class GraphBuilder {
     node.deletions = symbol.deletions;
     node.codeLines = codeLines;
     node.width = showCode ? 420 : 250;
-    node.height = 58 + (codeLines.length > 0 ? codeLines.length * 15 + 14 : 0);
+    // The box shows up to visiblePreviewLines and scrolls for the rest.
+    node.height = 58 + (codeLines.length > 0 ? Math.min(codeLines.length, visiblePreviewLines) * 15 + 14 : 0);
     return node;
   }
 

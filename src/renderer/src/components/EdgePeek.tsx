@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useReactFlow, useViewport } from "@xyflow/react";
-import { diffLines } from "diff";
 import type { CodeSymbol } from "@shared/types";
+import { changePreview } from "../lib/codePreview";
 import { useWorkspace } from "../lib/WorkspaceContext";
 
 interface Props {
@@ -21,7 +21,7 @@ interface Rect {
   bottom: number;
 }
 
-const maxLines = 9;
+const maxLines = 400;
 const gap = 14;
 // Room for the canvas toolbar above and the legend below.
 const topClear = 112;
@@ -128,7 +128,7 @@ export function EdgePeek({ nodeId, edgeEnds, direction, position }: Props) {
 function SymbolPeek({ symbol }: { symbol: CodeSymbol }) {
   const { model } = useWorkspace();
   const side = symbol.head ?? symbol.base!;
-  const lines = useMemo(() => changedLines(symbol), [symbol]);
+  const lines = useMemo(() => changePreview(symbol, maxLines), [symbol]);
   return (
     <>
       <div className="peek-title">
@@ -185,22 +185,4 @@ function FilePeek({ path }: { path: string }) {
       )}
     </>
   );
-}
-
-/** For changed code, the lines that changed; otherwise the first lines of the body. */
-function changedLines(symbol: CodeSymbol): { kind: "add" | "del" | "context"; text: string }[] {
-  const before = symbol.delta === "added" ? "" : (symbol.base?.code ?? "");
-  const after = symbol.head?.code ?? "";
-  if (symbol.delta === "unchanged" || symbol.formattingOnly) {
-    return (symbol.head ?? symbol.base)!.code.split("\n").slice(1, maxLines + 1).map((text) => ({ kind: "context" as const, text }));
-  }
-  const lines: { kind: "add" | "del" | "context"; text: string }[] = [];
-  for (const change of diffLines(before, after, { ignoreWhitespace: true })) {
-    if (!change.added && !change.removed) continue;
-    for (const text of change.value.replace(/\n$/, "").split("\n")) {
-      if (lines.length >= maxLines) return lines;
-      lines.push({ kind: change.added ? "add" : "del", text });
-    }
-  }
-  return lines;
 }

@@ -97,7 +97,7 @@ class AtlasApp {
       this.pipeline.regenerate(key, this.reporterFor(key), (analysis) => this.pushAnalysis(analysis)),
     );
     ipcMain.handle(IpcChannels.loadAnalysis, (_event, key: string) => this.store.loadAnalysis(key));
-    ipcMain.handle(IpcChannels.listRecent, () => this.store.recent());
+    ipcMain.handle(IpcChannels.listRecent, () => this.store.recentWithAuthors());
     ipcMain.handle(IpcChannels.ask, (_event, key: string, question: string, focusIds: string[], history: ChatTurn[]) => {
       const analysis = this.store.loadAnalysis(key);
       if (!analysis) throw new Error(`No saved analysis for ${key}`);

@@ -50,7 +50,7 @@ env -u ELECTRON_RUN_AS_NODE npm run dev
 | --- | --- |
 | drag, two-finger scroll, arrow keys (`⇧` for bigger steps) | move around the canvas |
 | pinch, `⌘`+scroll, `+` / `−` | zoom |
-| `1`–`5` | Architecture, Package, Module, Code, Flows |
+| `1`–`5` | Code, Architecture, Package, Module, Flows |
 | `j` / `k` | next / previous changed function |
 | `i` | isolate the selection and what it touches |
 | `v` | mark the selection viewed |

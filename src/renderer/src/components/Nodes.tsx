@@ -94,7 +94,16 @@ export function SymbolNode({ data }: NodeProps<AtlasNode>) {
         <DeltaBadge delta={spec.delta} neighbour={spec.neighbour} />
         <LineCounts additions={spec.additions} deletions={spec.deletions} />
       </div>
-      {spec.codeLines.length > 0 && <pre className="node-code">{spec.codeLines.join("\n")}</pre>}
+      {spec.codeLines.length > 0 && (
+        // `nowheel` lets two-finger scroll move the code instead of panning the canvas.
+        <pre className="node-code nowheel">
+          {spec.codeLines.map((line, index) => (
+            <div key={index} className={`code-line ${line.kind}`}>
+              {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "} {line.text}
+            </div>
+          ))}
+        </pre>
+      )}
     </div>
   );
 }

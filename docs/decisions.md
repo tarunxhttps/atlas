@@ -155,14 +155,34 @@ Each entry gives what was decided, why, and who decided it and when.
 - **Why:** Tarun: isolating a model should show the functions and files where it's used. Before this, only calls made lines, so a model named only in type hints looked unused.
 - **Who:** Tarun, 2026-10-31.
 
-## D24. The Architecture view doesn't take over mid-review
-- **Decided:** when Claude's explanation arrives, Atlas switches to Architecture only if nothing is selected.
-- **Why:** an explanation finishing while you're in the Code view pulled you away from the node you were reading.
-- **Who:** Claude, 2026-10-31.
+## D24. Atlas always opens on the Code view
+- **Decided:**
+  - **Code** is the first tab (`1`), followed by Architecture `2`, Package `3`, Module `4` and Flows `5`, and every PR opens on Code.
+  - The automatic switch to Architecture when Claude's explanation arrives is removed.
+- **Why:** Tarun wants the function-level map first. The earlier version (switch to Architecture when the explanation arrived, unless something was selected) was replaced the same day.
+- **Who:** Tarun, 2026-10-31.
 
 ## D25. No "hide formatting" filter
 - **Decided:** the toolbar's "hide formatting" checkbox and its filtering are removed. Formatting-only edits count as changes everywhere: their normal modified colour on the map, included in the "Changed" scope, and still labelled with a "format" badge in the Changes list and the inspector.
 - **Why:** Tarun: not needed.
+- **Who:** Tarun, 2026-10-31.
+
+## D26. Code in cards shows only the changed lines
+- **Decided:**
+  - With "code" ticked, a changed function's card shows only its added and removed lines, green and red, with no unchanged context. Added and removed functions show their whole body that way.
+  - Unchanged functions have no changed lines, so they show their first lines.
+  - The box is at most 18 lines tall and scrolls for the rest; it carries React Flow's `nowheel` class, so a two-finger scroll moves the code, not the canvas.
+  - The peek box uses the same helper (`lib/codePreview.ts`), 9 lines tall, also scrollable.
+- **Why:** Tarun: the first lines of a long function rarely show the change, and only the changed lines matter in a small box.
+- **Who:** Tarun, 2026-10-31.
+
+## D27. The map opens on "Changed"
+- **Decided:** the canvas scope starts at **Changed** (only added, modified and removed functions) instead of **With context**. Opening something hidden by that scope, from the tree, search, a link or a walkthrough step, still widens it to All.
+- **Why:** Tarun wants to start from the change itself and widen when needed.
+- **Who:** Tarun, 2026-10-31.
+
+## D29. Recent PRs show their author
+- **Decided:** the Home page's Recent list has an author column. Entries saved before this pick the author up from their saved analysis.
 - **Who:** Tarun, 2026-10-31.
 
 ## D11. The canvas pans like a map; nodes don't drag

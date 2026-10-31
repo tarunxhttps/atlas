@@ -133,6 +133,8 @@ export interface RecentEntry {
   key: string;
   url: string;
   title: string;
+  /** Missing on entries saved before authors were recorded; filled from the saved analysis when listed. */
+  author?: string;
   headSha: string;
   openedAt: string;
 }

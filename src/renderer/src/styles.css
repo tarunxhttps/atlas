@@ -430,7 +430,7 @@ button {
 }
 .recent-row {
   display: grid;
-  grid-template-columns: 230px 1fr auto;
+  grid-template-columns: 230px 1fr 130px auto;
   gap: 12px;
   width: 100%;
   text-align: left;
@@ -448,6 +448,13 @@ button {
   color: var(--accent);
 }
 .recent-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.recent-author {
+  color: var(--muted);
+  font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -869,7 +876,23 @@ button {
   gap: 4px;
   margin-left: auto;
 }
+.node-code .code-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 -8px;
+  padding: 0 8px;
+}
+.node-code .code-line.add {
+  background: var(--added-bg);
+  color: var(--added);
+}
+.node-code .code-line.del {
+  background: var(--removed-bg);
+  color: var(--removed);
+}
 .node-code {
+  max-height: calc(18 * 15px + 12px);
+  overflow-y: auto !important;
   margin: 8px 0 0;
   padding: 6px 8px;
   background: var(--code-bg);
@@ -2001,6 +2024,8 @@ body.resizing * {
   text-overflow: ellipsis;
 }
 .peek-code {
+  max-height: calc(9 * 16px + 8px);
+  overflow-y: auto !important;
   margin: 0;
   background: var(--code-bg);
   border: 1px solid var(--border);

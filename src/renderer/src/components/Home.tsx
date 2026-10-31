@@ -87,6 +87,7 @@ export function Home({ loadingUrl, progress, error, onOpen, onOpenSettings }: Pr
               <button key={entry.key} className="recent-row" onClick={() => onOpen(entry.url)}>
                 <span className="recent-key">{entry.key}</span>
                 <span className="recent-title">{entry.title}</span>
+                <span className="recent-author">{entry.author ?? "—"}</span>
                 <span className="recent-date">{new Date(entry.openedAt).toLocaleDateString()}</span>
               </button>
             ))}

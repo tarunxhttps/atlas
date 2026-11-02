@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Analysis, CallEdge, CodeSymbol } from "@shared/types";
 import type { RepoMirror } from "../services/RepoMirror";
+import { CallGraphBuilder, type SymbolCalls } from "./CallGraphBuilder";
 import { LanguageRegistry } from "./LanguageRegistry";
 import { SymbolDiffer } from "./SymbolDiffer";
 import type { ExtractedSymbol, SymbolExtractor } from "./SymbolExtractor";
@@ -15,6 +16,8 @@ const maxCodeChars = 6_000;
  * for a model. The analysis-time neighbour search only looks around changed code; this goes wider, on demand.
  */
 export class UsageFinder {
+  private readonly graphBuilder = new CallGraphBuilder();
+
   constructor(
     private readonly mirror: RepoMirror,
     private readonly extractor: SymbolExtractor,
@@ -35,36 +38,35 @@ export class UsageFinder {
       const language = LanguageRegistry.languageFor(path);
       const source = language ? await this.read(dir, path) : null;
       if (!language || source === null) continue;
-      const extracted = await this.extractor.extract(source, language);
-      const byQualified = new Map(extracted.map((symbol) => [symbol.qualifiedName, symbol]));
+      const parsed = await this.extractor.extract(source, language);
+      const byId = new Map(parsed.symbols.map((symbol) => [SymbolDiffer.symbolId(path, symbol.qualifiedName), symbol]));
+      const byQualified = new Map(parsed.symbols.map((symbol) => [symbol.qualifiedName, symbol]));
+      const entries: SymbolCalls[] = [...byId.entries()]
+        .filter(([id]) => id !== target.id)
+        .map(([, extracted]) => ({
+          symbol: this.toSymbol(path, language, extracted),
+          headCalls: extracted.calls,
+          baseCalls: extracted.calls,
+          headRefs: extracted.references,
+          baseRefs: extracted.references,
+          headImports: parsed.imports,
+          baseImports: parsed.imports,
+        }));
+      const targetEntry: SymbolCalls = { symbol: target, headCalls: [], baseCalls: [], headRefs: [], baseRefs: [], headImports: [], baseImports: [] };
 
-      for (const user of extracted) {
-        const calls_ = user.calls.some((call) => call.name === target.name && call.receiver !== "self");
-        const uses = user.references.includes(target.name);
-        const id = SymbolDiffer.symbolId(path, user.qualifiedName);
-        if ((!calls_ && !uses) || id === target.id) continue;
+      for (const edge of this.graphBuilder.build([...entries, targetEntry])) {
+        if (edge.to !== target.id || knownEdges.has(edge.id)) continue;
+        knownEdges.add(edge.id);
+        calls.push(edge);
 
         // Bring in the user and the classes around it, so the map can group it in its file and class.
-        for (let current: ExtractedSymbol | undefined = user; current; current = current.parentQualifiedName ? byQualified.get(current.parentQualifiedName) : undefined) {
+        for (let current = byId.get(edge.from); current; current = current.parentQualifiedName ? byQualified.get(current.parentQualifiedName) : undefined) {
           const currentId = SymbolDiffer.symbolId(path, current.qualifiedName);
           if (known.has(currentId)) continue;
           const symbol = this.toSymbol(path, language, current);
           known.set(currentId, symbol);
           symbols.push(symbol);
         }
-
-        const edgeId = `${id}->${target.id}`;
-        if (knownEdges.has(edgeId)) continue;
-        knownEdges.add(edgeId);
-        calls.push({
-          id: edgeId,
-          from: id,
-          to: target.id,
-          delta: "unchanged",
-          confidence: path === target.path ? "resolved" : "name-match",
-          dangling: target.delta === "removed",
-          kind: calls_ ? "call" : "reference",
-        });
       }
     }
     return { symbols, calls };

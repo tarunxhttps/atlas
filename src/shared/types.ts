@@ -85,8 +85,6 @@ export interface CodeSymbol {
   deletions: number;
 }
 
-export type EdgeConfidence = "resolved" | "name-match";
-
 export interface CallEdge {
   id: string;
   from: string;
@@ -94,7 +92,6 @@ export interface CallEdge {
   /** "reference": the code names a class (type hint, isinstance, attribute) without calling it. Missing means "call". */
   kind?: "call" | "reference";
   delta: Delta;
-  confidence: EdgeConfidence;
   /** The head still calls a symbol this PR removed. */
   dangling: boolean;
 }
@@ -117,6 +114,8 @@ export interface Analysis {
   narrativeError: string | null;
   narrativeModel: string | null;
   createdAt: string;
+  /** How the facts were parsed; a saved analysis from an older parser is re-parsed rather than loaded. */
+  factsVersion?: number;
   /** Classes whose usages were searched for across the whole repo (when isolated). */
   expandedUsages?: string[];
 }

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CodeSymbol } from "@shared/types";
 import type { RepoMirror } from "../services/RepoMirror";
-import { CallGraphBuilder, type SymbolCalls } from "./CallGraphBuilder";
+import type { SymbolCalls } from "./CallGraphBuilder";
 import { LanguageRegistry } from "./LanguageRegistry";
 import { SymbolDiffer } from "./SymbolDiffer";
 import type { SymbolExtractor } from "./SymbolExtractor";
@@ -15,6 +15,20 @@ const maxNeighbourFileBytes = 400_000;
  * diagrams can show the blast radius rather than only the edited files.
  */
 export class NeighbourFinder {
+  // Names so common that searching the repo for them would pull in half the codebase.
+  private static readonly genericNames = new Set([
+    "get", "set", "has", "add", "push", "pop", "append", "extend", "insert", "remove", "delete", "update", "clear",
+    "map", "filter", "reduce", "forEach", "find", "some", "every", "includes", "indexOf", "slice", "splice", "join",
+    "split", "replace", "trim", "strip", "lower", "upper", "format", "keys", "values", "items", "entries", "then",
+    "catch", "finally", "toString", "valueOf", "call", "apply", "bind", "emit", "on", "off", "once", "log", "info",
+    "warn", "error", "debug", "json", "send", "close", "open", "read", "write", "run", "init", "__init__", "copy",
+    "sort", "count", "index", "encode", "decode", "load", "loads", "dump", "dumps", "exists", "next", "render",
+    "execute", "process", "handle", "create", "start", "stop", "main", "test", "setUp", "tearDown", "constructor",
+    "length", "default", "parse", "validate", "dict", "model_dump", "model_validate", "isinstance", "len", "str",
+    "int", "list", "print", "range", "super", "getattr", "setattr", "hasattr", "enumerate", "zip", "sorted", "any",
+    "all", "min", "max", "sum", "Promise", "Error", "Date", "Object", "Array", "String", "Number", "Boolean",
+  ]);
+
   constructor(
     private readonly mirror: RepoMirror,
     private readonly extractor: SymbolExtractor,
@@ -44,7 +58,8 @@ export class NeighbourFinder {
       if (!language) continue;
       const source = await this.readSource(dir, path);
       if (source === null) continue;
-      for (const extracted of await this.extractor.extract(source, language)) {
+      const parsed = await this.extractor.extract(source, language);
+      for (const extracted of parsed.symbols) {
         const code = extracted.code.length > maxNeighbourCodeChars ? `${extracted.code.slice(0, maxNeighbourCodeChars)}\n…` : extracted.code;
         const symbol: CodeSymbol = {
           id: SymbolDiffer.symbolId(path, extracted.qualifiedName),
@@ -63,7 +78,15 @@ export class NeighbourFinder {
           additions: 0,
           deletions: 0,
         };
-        neighbours.push({ symbol, headCalls: extracted.calls, baseCalls: extracted.calls, headRefs: extracted.references, baseRefs: extracted.references });
+        neighbours.push({
+          symbol,
+          headCalls: extracted.calls,
+          baseCalls: extracted.calls,
+          headRefs: extracted.references,
+          baseRefs: extracted.references,
+          headImports: parsed.imports,
+          baseImports: parsed.imports,
+        });
       }
     }
     return neighbours;
@@ -86,7 +109,7 @@ export class NeighbourFinder {
   }
 
   private searchable(name: string): boolean {
-    return name.length >= 4 && /^[A-Za-z_$][\w$]*$/.test(name) && !CallGraphBuilder.genericNames.has(name);
+    return name.length >= 4 && /^[A-Za-z_$][\w$]*$/.test(name) && !NeighbourFinder.genericNames.has(name);
   }
 
   private async readSource(dir: string, path: string): Promise<string | null> {

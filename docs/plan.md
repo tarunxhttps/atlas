@@ -11,7 +11,7 @@ Everything below is CREATE; this is a new repo at `~/BIK/personal/atlas`.
 - `narrative.ts`: zod schemas for Claude's structured output (the narrative and chat answers).
 - `ipc.ts`: IPC channel names and the `AtlasApi` the preload exposes.
 - `review.ts`: what counts as one review item (each changed function or method, plus each changed file with no changed function), shared by main and the renderer.
-- `paths.ts`: test-path detection, used by both the graph builder and the call resolver.
+- `paths.ts`: test-path and markdown-path detection, used by the renderer's filters.
 
 ### Main process (`src/main/`)
 - `index.ts`: `AtlasApp` creates the window, wires the services together and registers the IPC handlers.
@@ -29,9 +29,9 @@ Everything below is CREATE; this is a new repo at `~/BIK/personal/atlas`.
   - Assigns deltas and detects formatting-only edits and moved functions.
   - Counts changed lines per symbol.
 - `analysis/CallGraphBuilder.ts`:
-  - Resolves calls by name, on the base side and the head side, giving added, removed and unchanged edges.
+  - Resolves calls on the base side and the head side, giving added, removed and unchanged edges. Only calls proven by the same class, the same file or an import get an edge (decisions D7).
   - Flags dangling calls (the head still calls code the PR removed).
-  - Marks how confident each edge is.
+- `analysis/ImportResolver.ts`: decides whether an import names a file (relative imports exactly, absolute ones as a path suffix, packages include the files under them).
 - `analysis/NeighbourFinder.ts`: finds unchanged files outside the PR that call into the change or are called by it, which is the blast radius.
 - `analysis/AnalysisPipeline.ts`:
   - Runs the steps in order and reports progress.

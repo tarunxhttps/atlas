@@ -7,7 +7,24 @@ export type CallReceiver = "self" | "super" | "other" | null;
 export interface CallSite {
   name: string;
   receiver: CallReceiver;
+  /** What `x.name()` is called on, as written (`utils`, `a.b`); null for a bare call. */
+  object: string | null;
   line: number;
+}
+
+/** One name a file imports; how `CallGraphBuilder` proves that a call crosses into another file. */
+export interface ImportBinding {
+  /** The name the file uses: `foo`, `ab`, `a.b.c`, or `*` for a wildcard import. */
+  local: string;
+  /** Slash-separated; starts with `.` when relative to the importing file, otherwise matched as a path suffix. */
+  module: string;
+  /** The name inside the module, or null when `local` is the module itself (`import x`, `import * as x`). */
+  imported: string | null;
+}
+
+export interface ParsedFile {
+  symbols: ExtractedSymbol[];
+  imports: ImportBinding[];
 }
 
 export interface ExtractedSymbol {
@@ -52,21 +69,26 @@ export class SymbolExtractor {
 
   constructor(private readonly registry: LanguageRegistry) {}
 
-  async extract(source: string, language: LanguageId): Promise<ExtractedSymbol[]> {
+  async extract(source: string, language: LanguageId): Promise<ParsedFile> {
     const parser = await this.registry.parser(language);
     const tree = parser.parse(source);
-    if (!tree) return [];
-    const symbols: ExtractedSymbol[] = [];
+    if (!tree) return { symbols: [], imports: [] };
+    const parsed: ParsedFile = { symbols: [], imports: [] };
     const seen = new Map<string, number>();
     try {
-      this.visit(tree.rootNode, [], symbols, seen, language);
+      this.visit(tree.rootNode, [], parsed, seen, language);
     } finally {
       tree.delete();
     }
-    return symbols;
+    return parsed;
   }
 
-  private visit(node: Node, scopes: Scope[], out: ExtractedSymbol[], seen: Map<string, number>, language: LanguageId): void {
+  private visit(node: Node, scopes: Scope[], parsed: ParsedFile, seen: Map<string, number>, language: LanguageId): void {
+    if (node.type === "import_statement" || node.type === "import_from_statement") {
+      parsed.imports.push(...(language === "python" ? this.pythonImports(node) : this.scriptImports(node)));
+      return;
+    }
+    const out = parsed.symbols;
     const declared = this.declare(node, scopes, seen, language);
     if (declared) {
       out.push(declared.symbol);
@@ -84,7 +106,7 @@ export class SymbolExtractor {
     }
 
     for (const child of node.namedChildren) {
-      if (child) this.visit(child, scopes, out, seen, language);
+      if (child) this.visit(child, scopes, parsed, seen, language);
     }
 
     if (declared?.symbol.kind === "class") {
@@ -174,13 +196,13 @@ export class SymbolExtractor {
       const nameNode = node.childForFieldName("name");
       if (!nameNode) return null;
       const name = nameNode.type === "member_expression" ? nameNode.childForFieldName("property")?.text : nameNode.text;
-      return name && /^[A-Z]/.test(name) ? { name, receiver: null, line } : null;
+      return name && /^[A-Z]/.test(name) ? { name, receiver: null, object: null, line } : null;
     }
     return null;
   }
 
   private callTarget(target: Node, line: number): CallSite | null {
-    if (target.type === "identifier") return { name: target.text, receiver: null, line };
+    if (target.type === "identifier") return { name: target.text, receiver: null, object: null, line };
     if (target.type === "member_expression" || target.type === "attribute") {
       const property = target.childForFieldName("property") ?? target.childForFieldName("attribute");
       const object = target.childForFieldName("object");
@@ -192,9 +214,77 @@ export class SymbolExtractor {
           : objectText === "super" || objectText.startsWith("super(")
             ? "super"
             : "other";
-      return { name: property.text, receiver, line };
+      return { name: property.text, receiver, object: this.constructedClass(object) ?? objectText, line };
     }
     return null;
+  }
+
+  /** `Foo(...).bar()` and `new Foo().bar()` call `bar` on `Foo` as surely as `Foo.bar()` does. */
+  private constructedClass(object: Node | null): string | null {
+    if (!object) return null;
+    const callee =
+      object.type === "call" || object.type === "call_expression"
+        ? object.childForFieldName("function")
+        : object.type === "new_expression"
+          ? object.childForFieldName("constructor")
+          : null;
+    return callee?.type === "identifier" && /^[A-Z]/.test(callee.text) ? callee.text : null;
+  }
+
+  private pythonImports(node: Node): ImportBinding[] {
+    const names = node.childrenForFieldName("name").filter((child): child is Node => child !== null);
+    const split = (name: Node) =>
+      name.type === "aliased_import"
+        ? { dotted: name.childForFieldName("name")?.text ?? "", alias: name.childForFieldName("alias")?.text }
+        : { dotted: name.text, alias: undefined };
+    if (node.type === "import_statement") {
+      // `import a.b.c` is used as `a.b.c.fn()`; `import a.b as ab` as `ab.fn()`.
+      return names.map(split).map(({ dotted, alias }) => ({ local: alias ?? dotted, module: dotted.replace(/\./g, "/"), imported: null }));
+    }
+    const moduleNode = node.childForFieldName("module_name");
+    if (!moduleNode) return [];
+    const module = this.pythonModule(moduleNode);
+    if (node.namedChildren.some((child) => child?.type === "wildcard_import")) return [{ local: "*", module, imported: null }];
+    return names.map(split).map(({ dotted, alias }) => ({ local: alias ?? dotted, module, imported: dotted }));
+  }
+
+  /** `..p.q` becomes `../p/q` and `.` stays `.`, so relative modules resolve like script paths. */
+  private pythonModule(moduleNode: Node): string {
+    if (moduleNode.type !== "relative_import") return moduleNode.text.replace(/\./g, "/");
+    const dots = moduleNode.namedChildren.find((child) => child?.type === "import_prefix")?.text.length ?? 1;
+    const rest = moduleNode.namedChildren.find((child) => child?.type === "dotted_name")?.text.replace(/\./g, "/");
+    const up = dots === 1 ? "." : Array.from({ length: dots - 1 }, () => "..").join("/");
+    return rest ? `${up}/${rest}` : up;
+  }
+
+  private scriptImports(node: Node): ImportBinding[] {
+    const source = node.childForFieldName("source")?.namedChildren.find((child) => child?.type === "string_fragment")?.text;
+    const clause = node.namedChildren.find((child) => child?.type === "import_clause");
+    if (!source || !clause) return [];
+    const module = this.scriptModule(source);
+    const bindings: ImportBinding[] = [];
+    for (const part of clause.namedChildren) {
+      if (!part) continue;
+      // A default export's own name isn't visible here; the local name is the best stand-in.
+      if (part.type === "identifier") bindings.push({ local: part.text, module, imported: part.text });
+      if (part.type === "namespace_import") {
+        const local = part.namedChildren.find((child) => child?.type === "identifier")?.text;
+        if (local) bindings.push({ local, module, imported: null });
+      }
+      if (part.type !== "named_imports") continue;
+      for (const specifier of part.namedChildren) {
+        const imported = specifier?.childForFieldName("name")?.text;
+        if (imported) bindings.push({ local: specifier?.childForFieldName("alias")?.text ?? imported, module, imported });
+      }
+    }
+    return bindings;
+  }
+
+  /** Drops the extension, and the alias prefix of `@/x`, `~/x` and `@shared/x`, so the rest matches as a path suffix. */
+  private scriptModule(source: string): string {
+    const withoutExtension = source.replace(/\.(m|c)?[jt]sx?$/, "");
+    if (withoutExtension.startsWith(".")) return withoutExtension;
+    return withoutExtension.replace(/^[@~]\//, "").replace(/^[@~]/, "");
   }
 
   private innermostCallable(scopes: Scope[]): ExtractedSymbol | null {

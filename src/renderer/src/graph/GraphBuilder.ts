@@ -48,7 +48,6 @@ export interface SpecEdge {
   target: string;
   delta: Delta;
   label: string;
-  nameMatch: boolean;
   dangling: boolean;
   hero: boolean;
   /** Names a class (type hint, isinstance, attribute) rather than calling it. */
@@ -191,7 +190,6 @@ export class GraphBuilder {
         target,
         delta: this.edgeDelta(list),
         label: list.length > 1 ? `${list.length} calls` : "",
-        nameMatch: list.every((edge) => edge.confidence === "name-match"),
         dangling: list.some((edge) => edge.dangling),
         hero: false,
         reference: list.every((edge) => edge.kind === "reference"),
@@ -242,7 +240,6 @@ export class GraphBuilder {
         target: edge.to,
         delta: edge.delta,
         label: edge.label,
-        nameMatch: false,
         dangling: false,
         hero: edge.hero,
         reference: false,
@@ -314,7 +311,6 @@ export class GraphBuilder {
       target: edge.to,
       delta: edge.delta,
       label: edge.dangling ? (edge.kind === "reference" ? "uses removed class" : "calls removed code") : "",
-      nameMatch: edge.confidence === "name-match",
       dangling: edge.dangling,
       hero: false,
       reference: edge.kind === "reference",

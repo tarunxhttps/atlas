@@ -9,7 +9,7 @@ import { CallGraphBuilder, type SymbolCalls } from "./CallGraphBuilder";
 import { LanguageRegistry } from "./LanguageRegistry";
 import type { NeighbourFinder } from "./NeighbourFinder";
 import { SymbolDiffer } from "./SymbolDiffer";
-import type { SymbolExtractor } from "./SymbolExtractor";
+import type { ParsedFile, SymbolExtractor } from "./SymbolExtractor";
 import type { UsageFinder } from "./UsageFinder";
 import { UnifiedDiffParser } from "./UnifiedDiffParser";
 
@@ -38,6 +38,9 @@ export type ProgressReporter = (stage: ProgressStage, message: string) => void;
 type NarrativePlan = { kind: "full" } | { kind: "update"; previous: Analysis; sincePatch: string };
 
 const maxSincePatchChars = 150_000;
+
+// Bump when parsing or call resolution changes, so saved maps are rebuilt instead of showing stale edges.
+const factsVersion = 2;
 
 export class AnalysisPipeline {
   private readonly diffParser = new UnifiedDiffParser();
@@ -81,7 +84,8 @@ export class AnalysisPipeline {
     report("fetch", `Reading ${key} from GitHub`);
     const meta = await this.github.fetchMeta(ref);
 
-    const cached = force ? null : this.store.loadAnalysis(key, meta.headSha);
+    const saved = force ? null : this.store.loadAnalysis(key, meta.headSha);
+    const cached = saved?.factsVersion === factsVersion ? saved : null;
     if (cached) {
       this.store.saveAnalysis(cached);
       // A pending narrative means the app quit mid-run; failed ones wait for the user to retry.
@@ -133,6 +137,7 @@ export class AnalysisPipeline {
       narrativeError: null,
       narrativeModel: null,
       createdAt: new Date().toISOString(),
+      factsVersion,
     };
     const plan = await this.narrativePlan(dir, previous, analysis);
     if (plan === "reuse") {
@@ -240,8 +245,8 @@ export class AnalysisPipeline {
     return entries;
   }
 
-  private async extractIfSmall(source: string | null, file: ChangedFile) {
-    if (source === null || source.length > maxParsedFileChars || !file.language) return [];
+  private async extractIfSmall(source: string | null, file: ChangedFile): Promise<ParsedFile> {
+    if (source === null || source.length > maxParsedFileChars || !file.language) return { symbols: [], imports: [] };
     return this.extractor.extract(source, file.language);
   }
 

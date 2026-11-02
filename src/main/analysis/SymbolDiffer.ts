@@ -1,5 +1,5 @@
 import type { ChangedFile, CodeSymbol, Delta, LanguageId, SymbolSide } from "@shared/types";
-import type { ExtractedSymbol } from "./SymbolExtractor";
+import type { ExtractedSymbol, ImportBinding, ParsedFile } from "./SymbolExtractor";
 
 export interface DiffedSymbol {
   symbol: CodeSymbol;
@@ -7,6 +7,8 @@ export interface DiffedSymbol {
   baseCalls: ExtractedSymbol["calls"];
   headRefs: string[];
   baseRefs: string[];
+  headImports: ImportBinding[];
+  baseImports: ImportBinding[];
 }
 
 export class SymbolDiffer {
@@ -15,9 +17,9 @@ export class SymbolDiffer {
   }
 
   /** Pairs base and head symbols of one changed file by qualified name. */
-  diffFile(file: ChangedFile, language: LanguageId, base: ExtractedSymbol[], head: ExtractedSymbol[]): DiffedSymbol[] {
-    const baseByName = new Map(base.map((symbol) => [symbol.qualifiedName, symbol]));
-    const headByName = new Map(head.map((symbol) => [symbol.qualifiedName, symbol]));
+  diffFile(file: ChangedFile, language: LanguageId, base: ParsedFile, head: ParsedFile): DiffedSymbol[] {
+    const baseByName = new Map(base.symbols.map((symbol) => [symbol.qualifiedName, symbol]));
+    const headByName = new Map(head.symbols.map((symbol) => [symbol.qualifiedName, symbol]));
     const names = [...new Set([...headByName.keys(), ...baseByName.keys()])];
 
     return names.map((qualifiedName) => {
@@ -42,7 +44,15 @@ export class SymbolDiffer {
         additions: after ? this.countLines(file, "add", after.startLine, after.endLine) : 0,
         deletions: before ? this.countLines(file, "del", before.startLine, before.endLine) : 0,
       };
-      return { symbol, headCalls: after?.calls ?? [], baseCalls: before?.calls ?? [], headRefs: after?.references ?? [], baseRefs: before?.references ?? [] };
+      return {
+        symbol,
+        headCalls: after?.calls ?? [],
+        baseCalls: before?.calls ?? [],
+        headRefs: after?.references ?? [],
+        baseRefs: before?.references ?? [],
+        headImports: head.imports,
+        baseImports: base.imports,
+      };
     });
   }
 

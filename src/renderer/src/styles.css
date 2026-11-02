@@ -752,9 +752,6 @@ button {
 .legend-item.neighbour::before {
   border-color: var(--neighbour);
 }
-.legend-item.name-match::before {
-  border-top-style: dotted;
-}
 .legend-item.reference::before {
   border-top-style: dashed;
   border-top-width: 1px;

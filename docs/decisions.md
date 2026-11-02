@@ -39,14 +39,16 @@ Each entry gives what was decided, why, and who decided it and when.
 - **Why:** the prebuilt `tree-sitter-wasms` bundle fails to load in web-tree-sitter 0.27 (its WASM metadata format is too old). The official packages load fine and need no native build.
 - **Who:** Claude, 2026-10-31.
 
-## D7. Calls are resolved by name, with a confidence on each edge
-- **Decided:**
-  - Calls on `self`/`this` resolve within the same class, and calls in the same file resolve locally. Both are marked `resolved`.
-  - Anything else must be the only candidate of that name, or the only one in the caller's folder, and is marked `name-match`.
-  - Common names such as `get`, `run` and `append` are never matched.
-  - Production code is never matched by name to test helpers or mocks.
-- **Why:** without type information, a name match is the only cheap option. The dotted edge style tells you how far to trust an edge. The test-path rule came from a false edge found while testing, from `PubSubService` to a test mock.
-- **Who:** Claude, 2026-10-31.
+## D7. Only proven calls get an edge
+- **Decided:** an edge is drawn only when the code proves it:
+  - `self.x()` / `this.x()` to a method of the same class.
+  - A bare call to a function in the same file.
+  - `Foo.x()`, `Foo(...).x()` or `new Foo().x()` where `Foo` is a class in the same file.
+  - A name the caller's file imports from the target's file: `from m import foo` then `foo()`, `import m` then `m.foo()`, `from m import Foo` then `Foo.x()`, wildcard imports, and the TS/JS equivalents. An import of a package (`__init__.py`, `index.ts`) also proves targets inside it, since that is how re-exports reach them.
+  - Calls through anything else (`self.client.send()`, a local variable) get no edge.
+  - The `confidence` field, the dotted "matched by name" style and the "by name" badge are gone. Saved analyses carry a `factsVersion` and are re-parsed when it changes; the explanation is reused when the head is unchanged.
+- **Why:** Tarun doesn't want probable links on the map ("if the function is not called then don't show"). Before this, cross-file calls were guessed from the name alone (the only candidate of that name, or the only one in the caller's folder).
+- **Who:** Tarun, 2026-11-01. This replaces the 2026-10-31 rule (resolve by name and mark guesses `name-match`).
 
 ## D8. One PCRE `git grep` for neighbour search
 - **Decided:** search with `git grep -P "\b(?:a|b|…)\b"`, falling back to `-w -E` when git has no PCRE.

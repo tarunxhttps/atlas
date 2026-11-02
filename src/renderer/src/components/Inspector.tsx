@@ -182,7 +182,6 @@ function TraceList({ edges, direction }: { edges: CallEdge[]; direction: "caller
               {edge.kind === "reference" && <span className="badge subtle">uses</span>}
               {edge.delta !== "unchanged" && <span className={`badge delta-${edge.delta}`}>{edge.kind === "reference" ? "use" : "call"} {edge.delta}</span>}
               {edge.dangling && <span className="badge delta-removed">calls removed code</span>}
-              {edge.confidence === "name-match" && <span className="badge subtle">by name</span>}
               {!symbol.inPr && <span className="badge neighbour">outside PR</span>}
             </button>
           ))}

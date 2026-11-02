@@ -164,7 +164,7 @@ export class NarrativeService {
     });
     const edgeLines = calls.map(
       (edge) =>
-        `${edge.from} -> ${edge.to} [${edge.kind === "reference" ? "uses, " : ""}${edge.delta}${edge.dangling ? ", DANGLING" : ""}${edge.confidence === "name-match" ? ", by name" : ""}]`,
+        `${edge.from} -> ${edge.to} [${edge.kind === "reference" ? "uses, " : ""}${edge.delta}${edge.dangling ? ", DANGLING" : ""}]`,
     );
     return [`Files:`, ...fileLines, "", `Symbols (id | kind delta | lines | signature):`, ...symbolLines, "", `Calls and uses (a "uses" edge names a class without calling it):`, ...edgeLines].join("\n");
   }

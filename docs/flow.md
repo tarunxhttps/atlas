@@ -9,7 +9,7 @@
 1. `Home` submits the link → `App.open` → `window.atlas.analyze(url, force)` → IPC `atlas:analyze`.
 2. `AtlasApp` → `AnalysisPipeline.analyze`:
    1. `GitHubPrClient.parseRef` and `fetchMeta` (`gh pr view --json …`).
-   2. `AtlasStore.loadAnalysis(key, headSha)`. If an analysis for this commit is cached, return it. If its narrative was cut off by quitting, restart it.
+   2. `AtlasStore.loadAnalysis(key, headSha)`. If an analysis for this commit is cached and its `factsVersion` matches the current parser, return it. If its narrative was cut off by quitting, restart it.
    3. Sync the repo with `RepoMirror`: `ensureClone` (`gh repo clone`, blobless), `fetchPr` (`refs/pull/N/head` and the base branch), `mergeBase`, `checkout(headSha)`.
    4. `RepoMirror.diff(mergeBase, head)` → `UnifiedDiffParser.parse` gives the `ChangedFile[]`. Excludes come from the default globs plus the repo's corrections.
    5. `parsePrFiles`, for each supported file:
@@ -21,7 +21,7 @@
       - Collects the changed names and the names they call that aren't defined in the PR.
       - Runs `RepoMirror.grepWords` (one PCRE `git grep`) and ranks files by how many words they hit.
       - Parses the top N files and adds their symbols as unchanged neighbours (`inPr: false`).
-   7. `CallGraphBuilder.build` resolves calls on the base and head sides, giving added, removed, unchanged and dangling edges. `keepConnectedNeighbours` drops neighbours with no edge to the PR.
+   7. `CallGraphBuilder.build` resolves calls on the base and head sides, giving added, removed, unchanged and dangling edges. A call crossing files needs an import that `ImportResolver.provides` matches to the target's file; `SymbolExtractor` records each file's imports alongside its symbols. `keepConnectedNeighbours` drops neighbours with no edge to the PR.
    8. `AtlasStore.saveAnalysis` saves it, and the analysis is returned to the renderer (narrative `pending`).
    9. `narrativePlan` compares this analysis with the previously saved one (decisions D15):
       - Same head, or new commits that touch no PR file: **reuse**. `NarrativeService.reuse` re-checks the old explanation against the new facts, and the analysis is returned ready. No Claude call.

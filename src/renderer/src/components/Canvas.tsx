@@ -263,7 +263,7 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
           style: {
             stroke: color,
             strokeWidth: picked ? 4.5 : edge.hero || touches ? 2.4 : 1.4,
-            strokeDasharray: edge.delta === "removed" || edge.dangling ? "6 4" : edge.reference ? "9 3 2 3" : edge.nameMatch ? "2 4" : undefined,
+            strokeDasharray: edge.delta === "removed" || edge.dangling ? "6 4" : edge.reference ? "9 3 2 3" : undefined,
             // A picked line stands alone: every other line nearly disappears until Enter or Esc.
             opacity: edgeCursor ? (picked ? 1 : 0.07) : anyFocus && !touches ? 0.18 : 1,
           },
@@ -327,7 +327,6 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
           <span className="legend-item modified">modified</span>
           <span className="legend-item removed">removed</span>
           <span className="legend-item neighbour">outside PR</span>
-          <span className="legend-item name-match">matched by name</span>
           <span className="legend-item reference">uses (type/model)</span>
           <button className="btn ghost small" onClick={() => void exportPng()}>
             Export PNG

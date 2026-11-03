@@ -94,6 +94,8 @@ export interface CallEdge {
   delta: Delta;
   /** The head still calls a symbol this PR removed. */
   dangling: boolean;
+  /** File line numbers of the calls in the caller, on each side; references have none. */
+  lines?: { head: number[]; base: number[] };
 }
 
 export interface AnalysisFacts {

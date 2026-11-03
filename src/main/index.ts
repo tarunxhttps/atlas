@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -166,13 +167,20 @@ class AtlasApp {
   private async exportFile(defaultName: string, kind: ExportKind, content: string): Promise<string | null> {
     if (!this.window) return null;
     const result = await dialog.showSaveDialog(this.window, {
-      defaultPath: join(app.getPath("downloads"), `${defaultName}.${kind}`),
+      defaultPath: this.freePath(app.getPath("downloads"), defaultName, kind),
       filters: [{ name: kind.toUpperCase(), extensions: [kind] }],
     });
     if (result.canceled || !result.filePath) return null;
     const data = kind === "png" ? Buffer.from(content.replace(/^data:image\/png;base64,/, ""), "base64") : content;
     await writeFile(result.filePath, data);
     return result.filePath;
+  }
+
+  /** `name.kind`, or `name-1.kind`, `name-2.kind`, … when an earlier export already took it. */
+  private freePath(dir: string, name: string, kind: ExportKind): string {
+    let path = join(dir, `${name}.${kind}`);
+    for (let copy = 1; existsSync(path); copy++) path = join(dir, `${name}-${copy}.${kind}`);
+    return path;
   }
 
   private async checkTools(): Promise<ToolStatus> {

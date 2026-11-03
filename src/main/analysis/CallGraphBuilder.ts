@@ -26,9 +26,12 @@ export class CallGraphBuilder {
 
   build(entries: SymbolCalls[]): CallEdge[] {
     const symbols = entries.map((entry) => entry.symbol);
-    const edges = new Map<string, { from: string; to: string; sides: Set<Side>; dangling: boolean; kind: "call" | "reference" }>();
+    const edges = new Map<
+      string,
+      { from: string; to: string; sides: Set<Side>; dangling: boolean; kind: "call" | "reference"; lines: Record<Side, Set<number>> }
+    >();
 
-    const record = (from: CodeSymbol, target: CodeSymbol, side: Side, dangling = false, kind: "call" | "reference" = "call") => {
+    const record = (from: CodeSymbol, target: CodeSymbol, side: Side, dangling = false, kind: "call" | "reference" = "call", line: number | null = null) => {
       if (from.id === target.id) return;
       const key = `${from.id}->${target.id}`;
       const existing = edges.get(key);
@@ -37,9 +40,12 @@ export class CallGraphBuilder {
         existing.dangling ||= dangling;
         // Calling a class also names it; the call is the stronger fact.
         if (kind === "call") existing.kind = "call";
+        if (line !== null) existing.lines[side].add(line);
         return;
       }
-      edges.set(key, { from: from.id, to: target.id, sides: new Set([side]), dangling, kind });
+      const lines = { head: new Set<number>(), base: new Set<number>() };
+      if (line !== null) lines[side].add(line);
+      edges.set(key, { from: from.id, to: target.id, sides: new Set([side]), dangling, kind, lines });
     };
 
     for (const side of ["head", "base"] as const) {
@@ -55,11 +61,11 @@ export class CallGraphBuilder {
         for (const call of useHead ? entry.headCalls : entry.baseCalls) {
           const target = this.resolve(entry.symbol, call, imports, byName);
           if (target) {
-            record(entry.symbol, target, side);
+            record(entry.symbol, target, side, false, "call", call.line);
             continue;
           }
           const removedTarget = removedByName ? this.resolve(entry.symbol, call, imports, removedByName) : null;
-          if (removedTarget) record(entry.symbol, removedTarget, "head", true);
+          if (removedTarget) record(entry.symbol, removedTarget, "head", true, "call", call.line);
         }
 
         for (const name of useHead ? entry.headRefs : entry.baseRefs) {
@@ -74,6 +80,18 @@ export class CallGraphBuilder {
       }
     }
 
+    // `Foo(x).bar()` or `Foo.bar()` also names `Foo`; the method line already says it, and a line to the
+    // class would end on its frame's border (or loop back to the caller's own class).
+    const byId = new Map(symbols.map((symbol) => [symbol.id, symbol]));
+    const callsIntoClass = new Set<string>();
+    for (const edge of edges.values()) {
+      const parent = byId.get(edge.to)?.parentId;
+      if (parent && byId.get(parent)?.kind === "class") callsIntoClass.add(`${edge.from}->${parent}`);
+    }
+    for (const [key, edge] of edges) {
+      if (byId.get(edge.to)?.kind === "class" && callsIntoClass.has(key)) edges.delete(key);
+    }
+
     return [...edges.values()].map((edge) => ({
       id: `${edge.from}->${edge.to}`,
       from: edge.from,
@@ -81,6 +99,7 @@ export class CallGraphBuilder {
       delta: edge.dangling ? "unchanged" : edge.sides.size === 2 ? "unchanged" : edge.sides.has("head") ? "added" : "removed",
       dangling: edge.dangling,
       kind: edge.kind,
+      lines: { head: [...edge.lines.head].sort((a, b) => a - b), base: [...edge.lines.base].sort((a, b) => a - b) },
     }));
   }
 

@@ -46,6 +46,7 @@ Each entry gives what was decided, why, and who decided it and when.
   - `Foo.x()`, `Foo(...).x()` or `new Foo().x()` where `Foo` is a class in the same file.
   - A name the caller's file imports from the target's file: `from m import foo` then `foo()`, `import m` then `m.foo()`, `from m import Foo` then `Foo.x()`, wildcard imports, and the TS/JS equivalents. An import of a package (`__init__.py`, `index.ts`) also proves targets inside it, since that is how re-exports reach them.
   - Calls through anything else (`self.client.send()`, a local variable) get no edge.
+  - A caller with an edge to a method of class `Foo` gets no separate edge to `Foo` itself (`Foo(x).bar()`, `Foo.bar()`, a type hint next to such a call). That edge ended on the class frame's border, or looped back when a method named its own class. A class edge stays only when the caller constructs or names the class without calling one of its methods (Tarun, 2026-11-02, from PR #5965's `timeout_for`).
   - The `confidence` field, the dotted "matched by name" style and the "by name" badge are gone. Saved analyses carry a `factsVersion` and are re-parsed when it changes; the explanation is reused when the head is unchanged.
 - **Why:** Tarun doesn't want probable links on the map ("if the function is not called then don't show"). Before this, cross-file calls were guessed from the name alone (the only candidate of that name, or the only one in the caller's folder).
 - **Who:** Tarun, 2026-11-01. This replaces the 2026-10-31 rule (resolve by name and mark guesses `name-match`).
@@ -203,3 +204,31 @@ Each entry gives what was decided, why, and who decided it and when.
   - Opening a test function from search or a link turns the filter off.
 - **Why:** in PR #5952, 40+ new test methods buried the real code in one tall column.
 - **Who:** Claude, 2026-10-31. This is an open question in plan.md.
+
+## D30. Legend items switch their lines off
+- **Decided:**
+  - Clicking a legend item (added, modified, removed, unchanged, outside PR) hides its lines; clicking again brings them back. Several can be off at once.
+  - A line belongs to its delta (a dangling line counts as removed) and to "outside PR" when either end is outside the PR. It hides if any of its kinds is off.
+  - A node hides when it has lines and all of them are hidden, and a file or class frame hides when everything inside it is hidden. A node with no lines at all always stays. "Outside PR" also hides the outside-PR nodes themselves.
+  - Nodes are hidden in place, so the layout doesn't re-run and nothing moves; gaps stay where hidden nodes were.
+  - "Unchanged" covers calls and uses the PR didn't touch (grey); dangling lines count as removed, not unchanged (Tarun, 2026-11-02).
+  - The "uses (type/model)" legend item is gone (Tarun, 2026-11-02). Reference lines are still drawn dash-dot in their delta's colour.
+- **Why:** Tarun wants to clear out a kind of line to see the rest.
+- **Who:** Tarun asked, 2026-11-02.
+
+## D31. Export PNG saves what's on screen, named after the selected node
+- **Decided:**
+  - Export PNG captures the canvas pane as it is: current pan and zoom, legend-hidden lines and nodes left out.
+  - The file is named `<repo>-<number>-<level>-<node>.png` after the first selected node (a function row in Module view counts), or `<repo>-<number>-<level>.png` when nothing is selected.
+  - If that name is already taken in Downloads, the save dialog suggests `-1`, `-2`, … instead of overwriting.
+- **Why:** Tarun wants to export just the part being looked at, and keep several exports of the same node.
+- **Who:** Tarun, 2026-11-02.
+
+## D32. ⌘ + hover on a line shows its call lines
+- **Decided:**
+  - Holding ⌘ while hovering a line on the canvas opens a box by the cursor with the caller's lines that make the call, each marked added (+), removed (−), changed (~, with the old line above it) or unchanged.
+  - A file or folder line lists each call it groups (up to 6, then "+N more"). "Uses" lines and architecture lines have no call line; uses lines say so, architecture lines show nothing.
+  - `CallGraphBuilder` records each call's line numbers per side on the edge (`CallEdge.lines`), and `factsVersion` went to 3 so saved analyses re-parse once.
+  - A line's status comes from comparing the call's line text across sides: the same text is unchanged, leftovers pair up in order as changed, the rest are added or removed.
+- **Why:** Tarun wants to see the actual call behind a line without opening the code.
+- **Who:** Tarun, 2026-11-02.

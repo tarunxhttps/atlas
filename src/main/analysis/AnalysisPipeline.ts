@@ -40,7 +40,7 @@ type NarrativePlan = { kind: "full" } | { kind: "update"; previous: Analysis; si
 const maxSincePatchChars = 150_000;
 
 // Bump when parsing or call resolution changes, so saved maps are rebuilt instead of showing stale edges.
-const factsVersion = 2;
+const factsVersion = 4;
 
 export class AnalysisPipeline {
   private readonly diffParser = new UnifiedDiffParser();

@@ -6,8 +6,6 @@ import {
   MiniMap,
   Panel,
   ReactFlow,
-  getNodesBounds,
-  getViewportForBounds,
   useReactFlow,
   type Edge,
 } from "@xyflow/react";
@@ -15,7 +13,9 @@ import { toPng } from "html-to-image";
 import type { Delta } from "@shared/types";
 import { ElkLayouter, type PositionedNode } from "../graph/ElkLayouter";
 import type { GraphSpec } from "../graph/GraphBuilder";
+import { LegendFilter, type LegendKind } from "../graph/LegendFilter";
 import { useWorkspace } from "../lib/WorkspaceContext";
+import { CallPeek } from "./CallPeek";
 import { nodeTypeFor, nodeTypes, type AtlasNode } from "./Nodes";
 
 export interface FocusRequest {
@@ -71,11 +71,52 @@ export const deltaColors: Record<Delta, string> = {
 
 const layouter = new ElkLayouter();
 
+const legendItems: { kind: LegendKind; label: string }[] = [
+  { kind: "added", label: "added" },
+  { kind: "modified", label: "modified" },
+  { kind: "removed", label: "removed" },
+  { kind: "unchanged", label: "unchanged" },
+  { kind: "neighbour", label: "outside PR" },
+];
+
 export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, edgeCursor }: Props) {
   const { selectedIds, highlightIds, review, model } = useWorkspace();
   const flow = useReactFlow<AtlasNode, Edge>();
   const [positioned, setPositioned] = useState<PositionedNode[]>([]);
   const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [legendOff, setLegendOff] = useState<ReadonlySet<LegendKind>>(new Set());
+  const hidden = useMemo(() => new LegendFilter(legendOff).hide(spec), [legendOff, spec]);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [hoveredEdge, setHoveredEdge] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [commandHeld, setCommandHeld] = useState(false);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => setCommandHeld(event.metaKey);
+    const release = () => setCommandHeld(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
+
+  const trackEdge = (event: React.MouseEvent, edge: Edge) => {
+    const box = canvasRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setCommandHeld(event.metaKey);
+    setHoveredEdge({ id: edge.id, x: event.clientX - box.left, y: event.clientY - box.top });
+  };
+  const peekCallIds = commandHeld && hoveredEdge ? (spec.edges.find((edge) => edge.id === hoveredEdge.id)?.callIds ?? []) : [];
+
+  const toggleLegend = (kind: LegendKind) =>
+    setLegendOff((current) => {
+      const next = new Set(current);
+      if (!next.delete(kind)) next.add(kind);
+      return next;
+    });
 
   // Read inside effects without re-running them: a selection change alone must not move the camera.
   const selectedRef = useRef(selectedIds);
@@ -222,6 +263,8 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
         width: placed.width,
         height: placed.height,
         style: { width: placed.width, height: placed.height },
+        // Hidden in place rather than dropped from the spec, so switching a legend kind off doesn't re-run the layout.
+        hidden: hidden.nodes.has(placed.spec.id),
         // Draggable nodes block panning, and frames cover most of the canvas, so nothing drags.
         draggable: false,
         selectable: placed.spec.kind !== "lane",
@@ -235,7 +278,7 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
           viewed: viewed.has(placed.spec.id),
         },
       })),
-    [positioned, selectedNodeIds, highlightIds, connected, viewed, chipFocus, edgeCursor],
+    [positioned, selectedNodeIds, highlightIds, connected, viewed, chipFocus, edgeCursor, hidden],
   );
 
   const edges: Edge[] = useMemo(
@@ -254,6 +297,7 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
           source: edge.source,
           target: edge.target,
           ...handles,
+          hidden: hidden.edges.has(edge.id),
           // While a line is picked with ⌘→/⌘←, it's the only one that moves.
           animated: edgeCursor ? picked : edge.hero || (touches && anyFocus),
           label: picked ? `${edgeCursor.position} · Enter to follow` : edge.label || undefined,
@@ -271,27 +315,38 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
           labelBgStyle: { fill: "var(--panel)" },
         };
       }),
-    [spec, active, boxes, chipFocus, edgeCursor],
+    [spec, active, boxes, chipFocus, edgeCursor, hidden],
   );
+
+  /** The first selected node's name, safe for a file name; a function row in Module view counts too. */
+  const selectedLabel = (): string | null => {
+    const byId = new Map(spec.nodes.map((node) => [node.id, node.label]));
+    for (const id of selectedIds) {
+      const label = byId.get(id) ?? byId.get(`file:${id}`) ?? model.symbols.get(id)?.name;
+      if (label) return label.replace(/[\\/:*?"<>|\s]+/g, "_");
+    }
+    return null;
+  };
 
   const exportPng = async () => {
     const element = document.querySelector<HTMLElement>(".react-flow__viewport");
-    if (!element || nodes.length === 0) return;
-    const bounds = getNodesBounds(nodes);
-    const width = Math.min(8000, Math.max(1200, bounds.width + 160));
-    const height = Math.min(8000, Math.max(800, bounds.height + 160));
-    const viewport = getViewportForBounds(bounds, width, height, 0.1, 2, 0.05);
+    const pane = element?.closest<HTMLElement>(".react-flow");
+    if (!element || !pane) return;
+    // What's on screen right now: the pane's size at the current pan and zoom.
+    const { clientWidth: width, clientHeight: height } = pane;
+    const viewport = flow.getViewport();
     const dataUrl = await toPng(element, {
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim() || "#121316",
       width,
       height,
       style: { width: `${width}px`, height: `${height}px`, transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})` },
     });
-    await window.atlas.exportFile(exportName, "png", dataUrl);
+    const label = selectedLabel();
+    await window.atlas.exportFile(label ? `${exportName}-${label}` : exportName, "png", dataUrl);
   };
 
   return (
-    <div className="canvas">
+    <div className="canvas" ref={canvasRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -309,6 +364,9 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
         onNodeClick={(event, node) => node.data.spec.kind !== "lane" && onSelect(node.id, event.shiftKey || event.metaKey)}
         onNodeDoubleClick={(_event, node) => onIsolate(node.id)}
         onPaneClick={onClear}
+        onEdgeMouseEnter={trackEdge}
+        onEdgeMouseMove={trackEdge}
+        onEdgeMouseLeave={() => setHoveredEdge(null)}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--grid)" />
         <MiniMap
@@ -323,16 +381,31 @@ export function Canvas({ spec, focus, exportName, onSelect, onIsolate, onClear, 
           bgColor="var(--panel)"
         />
         <Panel position="bottom-left" className="legend">
-          <span className="legend-item added">added</span>
-          <span className="legend-item modified">modified</span>
-          <span className="legend-item removed">removed</span>
-          <span className="legend-item neighbour">outside PR</span>
-          <span className="legend-item reference">uses (type/model)</span>
+          {legendItems.map(({ kind, label }) => (
+            <button
+              key={kind}
+              className={`legend-item ${kind}${legendOff.has(kind) ? " off" : ""}`}
+              aria-pressed={!legendOff.has(kind)}
+              title={legendOff.has(kind) ? `Show ${label} lines` : `Hide ${label} lines`}
+              onClick={() => toggleLegend(kind)}
+            >
+              {label}
+            </button>
+          ))}
           <button className="btn ghost small" onClick={() => void exportPng()}>
             Export PNG
           </button>
         </Panel>
       </ReactFlow>
+      {hoveredEdge && peekCallIds.length > 0 && (
+        <CallPeek
+          callIds={peekCallIds}
+          x={hoveredEdge.x}
+          y={hoveredEdge.y}
+          width={canvasRef.current?.clientWidth ?? 0}
+          height={canvasRef.current?.clientHeight ?? 0}
+        />
+      )}
       {spec.empty && <div className="canvas-empty">{spec.empty}</div>}
       {layoutError && <div className="canvas-empty">Layout failed: {layoutError}</div>}
     </div>

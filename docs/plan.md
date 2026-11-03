@@ -55,6 +55,8 @@ Everything below is CREATE; this is a new repo at `~/BIK/personal/atlas`.
 - `lib/WorkspaceContext.ts`: shared workspace actions (reveal, highlight, viewed, isolate) and GitHub links.
 - `graph/GraphBuilder.ts`: builds the graph for each level (architecture, package, module, code), applying the scope and filters.
 - `graph/ElkLayouter.ts`: ELK layered layout with nesting; architecture lanes are laid out as fixed columns.
+- `graph/LegendFilter.ts`: which nodes and lines to hide for the legend kinds switched off (decisions D30).
+- `lib/CallSiteDiff.ts` and `components/CallPeek.tsx`: the ⌘ + hover box with a line's call lines, marked added, removed, changed or unchanged (decisions D32).
 - `components/`:
   - `App`, `Home`, `Workspace`
   - `Canvas` and `Nodes` (the React Flow canvas)

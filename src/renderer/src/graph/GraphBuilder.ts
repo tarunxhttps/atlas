@@ -52,6 +52,8 @@ export interface SpecEdge {
   hero: boolean;
   /** Names a class (type hint, isinstance, attribute) rather than calling it. */
   reference: boolean;
+  /** The call edges this line stands for; a file or folder line groups several, architecture lines none. */
+  callIds: string[];
 }
 
 export interface GraphSpec {
@@ -193,6 +195,7 @@ export class GraphBuilder {
         dangling: list.some((edge) => edge.dangling),
         hero: false,
         reference: list.every((edge) => edge.kind === "reference"),
+        callIds: list.map((edge) => edge.id),
       };
     });
 
@@ -243,6 +246,7 @@ export class GraphBuilder {
         dangling: false,
         hero: edge.hero,
         reference: false,
+        callIds: [],
       }));
     return { nodes, edges, laneLayout: true, empty: components.length === 0 ? "No components match these filters." : null };
   }
@@ -314,6 +318,7 @@ export class GraphBuilder {
       dangling: edge.dangling,
       hero: false,
       reference: edge.kind === "reference",
+      callIds: [edge.id],
     };
   }
 

@@ -21,7 +21,7 @@
       - Collects the changed names and the names they call that aren't defined in the PR.
       - Runs `RepoMirror.grepWords` (one PCRE `git grep`) and ranks files by how many words they hit.
       - Parses the top N files and adds their symbols as unchanged neighbours (`inPr: false`).
-   7. `CallGraphBuilder.build` resolves calls on the base and head sides, giving added, removed, unchanged and dangling edges. A call crossing files needs an import that `ImportResolver.provides` matches to the target's file; `SymbolExtractor` records each file's imports alongside its symbols. `keepConnectedNeighbours` drops neighbours with no edge to the PR.
+   7. `CallGraphBuilder.build` resolves calls on the base and head sides, giving added, removed, unchanged and dangling edges. A call crossing files needs an import that `ImportResolver.provides` matches to the target's file; `SymbolExtractor` records each file's imports alongside its symbols. A class edge is dropped when the same caller also calls one of that class's methods; each edge keeps the line numbers of its calls. `keepConnectedNeighbours` drops neighbours with no edge to the PR.
    8. `AtlasStore.saveAnalysis` saves it, and the analysis is returned to the renderer (narrative `pending`).
    9. `narrativePlan` compares this analysis with the previously saved one (decisions D15):
       - Same head, or new commits that touch no PR file: **reuse**. `NarrativeService.reuse` re-checks the old explanation against the new facts, and the analysis is returned ready. No Claude call.
@@ -43,6 +43,8 @@
    - **architecture**: Claude's lanes and components.
 3. `Canvas` → `ElkLayouter.layout(spec)`: ELK layered layout with nesting, or fixed lane columns for architecture. The result becomes React Flow nodes (`Nodes.tsx`) and edges coloured by delta.
 4. Selection, hover and highlights only restyle the nodes and edges (dimming, lit edges). The layout re-runs only when the spec changes.
+5. Legend clicks toggle `legendOff` in `Canvas` → `LegendFilter.hide(spec)` returns the node and edge ids to hide, which become React Flow's `hidden` flag. No re-layout (decisions D30).
+6. ⌘ + hover on a line: `Canvas.trackEdge` keeps the hovered line and cursor → `CallPeek` looks up the line's `callIds` → `CallSiteDiff.lines(call)` reads each call line's text from the caller's base and head code and marks it (decisions D32).
 
 ## Moving around
 - **Changes tree, search, links and chat answers** → `WorkspaceApi.reveal(id)` → `AnalysisModel.resolve(id)`:
